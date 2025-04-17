@@ -7,7 +7,8 @@ import tempfile
 
 # ---------- Your Original Functions (slightly modified to accept image directly) ----------
 def show_image(img, caption="Image"):
-    st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), caption=caption, use_column_width=True)
+    #st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), caption=caption, use_column_width=True)
+    st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), caption=caption, use_container_width=True)
 
 def extract_red_areas(img):
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -89,11 +90,21 @@ if uploaded_file:
         image_bgr, box_height, box_width, rows, cols, start_x, start_y
     )
 
-    show_image(processed_img, "Detected Red Circles and Boxes")
+    #show_image(processed_img, "Detected Red Circles and Boxes")
 
     # Create editable DataFrame
-    df = pd.DataFrame(max_boxes, columns=["Question (Row)", "Selected Option (Column)"])
-    edited_df = st.data_editor(df, num_rows="fixed", use_container_width=True)
+    #df = pd.DataFrame(max_boxes, columns=["Question (Row)", "Selected Option (Column)"])
+    #edited_df = st.data_editor(df, num_rows="fixed", use_container_width=True)
+
+    col1, col2 = st.columns([2,1])
+
+    with col1:
+        show_image(processed_img, "Detected Red Circles and Boxes")
+
+    with col2:
+        # Create editable DataFrame
+        df = pd.DataFrame(max_boxes, columns=["Question", "Reponse"])
+        edited_df = st.data_editor(df, num_rows="fixed", use_container_width=True, hide_index=True)
 
     if st.button("Submit"):
         st.success("Answers submitted successfully!")
