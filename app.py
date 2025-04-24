@@ -5,6 +5,13 @@ from PIL import Image
 import pandas as pd
 import tempfile
 
+image_params = [
+    {"box_height": 72, "box_width": 94, "rows": 16, "cols": 4, "start_x": 1067, "start_y": 932},
+    {"box_height": 72, "box_width": 94, "rows": 26, "cols": 4, "start_x": 1064, "start_y": 186},
+    {"box_height": 72, "box_width": 94, "rows": 26, "cols": 4, "start_x": 1064, "start_y": 186},
+    {"box_height": 72, "box_width": 94, "rows": 22, "cols": 4, "start_x": 1064, "start_y": 186},
+]
+
 # ---------- Your Original Functions (slightly modified to accept image directly) ----------
 def show_image(img, caption="Image"):
     #st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), caption=caption, use_column_width=True)
@@ -69,47 +76,85 @@ def find_red_circle_coordinates(img, box_height_px, box_width_px, rows, cols, st
     return max_contours_boxes, boxed_img
 
 # ---------- Streamlit App ----------
-st.title("Red Circle Detector with Editable Table")
+#st.set_page_config(layout="wide")
 
-uploaded_file = st.file_uploader("Upload an image", type=["jpg", "png", "jpeg"])
-if uploaded_file:
-    image = Image.open(uploaded_file).convert("RGB")
-    image_np = np.array(image)
-    image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+st.title("Questionnaire pour enfant")
 
-    # Parameters
-    box_height = st.number_input("Box Height (px)", value=72)
-    box_width = st.number_input("Box Width (px)", value=94)
-    rows = st.number_input("Number of Rows", value=16, step=1)
-    cols = st.number_input("Number of Columns", value=4, step=1)
-    start_x = st.number_input("Start X", value=1067)
-    start_y = st.number_input("Start Y", value=932)
+uploaded_files = st.file_uploader(
+    "Téléchargez 4 images", type=["jpg", "jpeg", "png"], accept_multiple_files=True
+)
 
-    # Process Image
-    max_boxes, processed_img = find_red_circle_coordinates(
-        image_bgr, box_height, box_width, rows, cols, start_x, start_y
-    )
+if uploaded_files and len(uploaded_files) == 4:
+    all_results = []
+    question_counter = 1  # Start from Q1
 
-    #show_image(processed_img, "Detected Red Circles and Boxes")
+    for idx, uploaded_file in enumerate(uploaded_files):
+        st.subheader(f"Page {idx + 1}")
 
-    # Create editable DataFrame
-    #df = pd.DataFrame(max_boxes, columns=["Question (Row)", "Selected Option (Column)"])
-    #edited_df = st.data_editor(df, num_rows="fixed", use_container_width=True)
+        # Grab parameters for this image
+        params = image_params[idx]
+        box_height = params["box_height"]
+        box_width = params["box_width"]
+        rows = params["rows"]
+        cols = params["cols"]
+        start_x = params["start_x"]
+        start_y = params["start_y"]
 
-    col1, col2 = st.columns([2,1])
+        # Process image
+        image = Image.open(uploaded_file).convert("RGB")
+        image_np = np.array(image)
+        image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
 
-    with col1:
-        show_image(processed_img, "Detected Red Circles and Boxes")
+        max_boxes, processed_img = find_red_circle_coordinates(
+            image_bgr, box_height, box_width, rows, cols, start_x, start_y
+        )
 
-    with col2:
-        # Create editable DataFrame
-        df = pd.DataFrame(max_boxes, columns=["Question", "Reponse"])
-        edited_df = st.data_editor(df, num_rows="fixed", use_container_width=True, hide_index=True)
+        # Assign global question numbers
+        question_numbers = list(range(question_counter, question_counter + len(max_boxes)))
+        question_counter += len(max_boxes)
 
-    if st.button("Submit"):
-        st.success("Answers submitted successfully!")
-        st.dataframe(edited_df)
+        df = pd.DataFrame(max_boxes, columns=["_", "Reponse"])
+        df["Question"] = question_numbers
+        df = df[["Question", "Reponse"]]  # Reorder columns
 
-        # Optionally allow downloading
-        csv = edited_df.to_csv(index=False).encode("utf-8")
-        st.download_button("Download CSV", data=csv, file_name="answers.csv", mime="text/csv")
+        # Display results
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            show_image(processed_img, f"Detected Circles - Image {idx + 1}")
+        with col2:
+            #df = pd.DataFrame(max_boxes, columns=["Question", "Reponse"])
+            edited_df = st.data_editor(df, num_rows="fixed", use_container_width=True, hide_index=True, key=f"editor_{idx}")
+            all_results.append(edited_df)
+
+    if st.button("Tout soumettre"):
+        final_df = pd.concat(all_results, ignore_index=True)
+
+        # Remove duplicates: keep the first response per question
+        #final_df = final_df.drop_duplicates(subset=["Question"])
+
+        # Sort questions
+        final_df = final_df.sort_values(by="Question").reset_index(drop=True)
+
+        # Map responses
+        mapping = {1: 2, 2: 1, 3: 0, 4: "NSP"}
+        final_df["Mapped"] = final_df["Reponse"].map(mapping)
+
+        # Create wide format: questions as columns, one row for answers
+        questions = [f"Q{q}" for q in final_df["Question"]]
+        answers = final_df["Mapped"].tolist()
+
+        display_df = pd.DataFrame([answers], columns=questions, index=["Answer"])
+
+        st.success("Réponses traitées avec succès!")
+        st.dataframe(display_df)
+
+        # Optional: download
+        #csv = display_df.to_csv().encode("utf-8")
+        #st.download_button("Download Answers Table", data=csv, file_name="answers_table.csv", mime="text/csv")
+        
+        #final_df = pd.concat(all_results, keys=[f"Image {i+1}" for i in range(4)])
+        #st.success("All answers submitted successfully!")
+        #st.dataframe(final_df)
+
+        #csv = final_df.to_csv().encode("utf-8")
+        #st.download_button("Download All Answers as CSV", data=csv, file_name="all_answers.csv", mime="text/csv")
